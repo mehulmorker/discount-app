@@ -1,236 +1,258 @@
-# Shopify App Template - React Router
+# Volume Discount Shopify App
 
-This is a template for building a [Shopify app](https://shopify.dev/docs/apps/getting-started) using [React Router](https://reactrouter.com/). It was forked from the [Shopify Remix app template](https://github.com/Shopify/shopify-app-template-remix) and converted to React Router.
+A tiny Shopify app that creates a **"Buy 2, get X% off"** automatic discount using Shopify Functions, with an Admin UI to configure products and discount %, and a theme app extension widget on the Product page (PDP).
 
-Rather than cloning this repo, follow the [Quick Start steps](https://github.com/Shopify/shopify-app-template-react-router#quick-start).
+**Objective:** Build a Shopify app that lets merchants choose which product(s) and what % discount; stores config in metafields; applies discount via `cart.lines.discounts.generate.run`; and shows a widget on PDP (and optionally Cart).
 
-Visit the [`shopify.dev` documentation](https://shopify.dev/docs/api/shopify-app-react-router) for more details on the React Router app package.
+---
 
-## Upgrading from Remix
+## Tech Stack (MERN)
 
-If you have an existing Remix app that you want to upgrade to React Router, please follow the [upgrade guide](https://github.com/Shopify/shopify-app-template-react-router/wiki/Upgrading-from-Remix). Otherwise, please follow the quick start guide below.
+- **Backend:** Node.js
+- **Database:** MongoDB (session storage via `@shopify/shopify-app-session-storage-mongodb`)
+- **Frontend:** React, React Router 7, Shopify Polaris Web Components
+- **Shopify:** Discount Function API (2026-01), Theme App Extensions, Admin GraphQL API, Metafields
 
-## Quick start
+*Note: An alternative branch uses Prisma + SQLite for session storage; this branch uses MongoDB.*
 
-### Prerequisites
+---
 
-Before you begin, you'll need to [download and install the Shopify CLI](https://shopify.dev/docs/apps/tools/cli/getting-started) if you haven't already.
+## Prerequisites
 
-### Setup
+- **Node.js** `>=20.19 <22` or `>=22.12` (see `package.json` engines)
+- **Shopify Partner account** — [Create one](https://partners.shopify.com/signup)
+- **Development Store** — [Create a dev store](https://help.shopify.com/en/manual/partners/dashboard/development-stores/create) from the Partner Dashboard
+- **Shopify CLI** — [Install Shopify CLI](https://shopify.dev/docs/apps/tools/cli/getting-started)
+- **MongoDB** — Running locally or a connection string (e.g. `mongodb://localhost:27017/`)
 
-```shell
-shopify app init --template=https://github.com/Shopify/shopify-app-template-react-router
+---
+
+## Install & Run
+
+### 1. Clone and install
+
+```bash
+git clone <your-repo-url>
+cd discount-app
+npm install
 ```
 
-### Local Development
+### 2. Environment (MongoDB)
 
-```shell
+Ensure MongoDB is running. Optionally set:
+
+```bash
+export MONGODB_URI="mongodb://localhost:27017/"
+export MONGODB_DATABASE="volume_discount_app"
+```
+
+Defaults in code: `MONGODB_URI` → `mongodb://localhost:27017/`, `MONGODB_DATABASE` → `volume_discount_app`.
+
+### 3. Start development
+
+```bash
 shopify app dev
 ```
 
-Press P to open the URL to your app. Once you click install, you can start development.
+When prompted, select your **development store**. Press **P** to open the app URL; install the app when the browser opens.
 
-Local development is powered by [the Shopify CLI](https://shopify.dev/docs/apps/tools/cli). It logs into your account, connects to an app, provides environment variables, updates remote config, creates a tunnel and provides commands to generate extensions.
+### 4. Other useful commands
 
-### Authenticating and querying data
+```bash
+npm run build          # Build for production
+npm run start          # Run production server (after build)
+npm run deploy         # Deploy app and extensions to Shopify
+npm run setup          # Prisma generate + migrate (if using SQLite branch)
+```
 
-To authenticate and query data you can use the `shopify` const that is exported from `/app/shopify.server.js`:
+---
 
-```js
-export async function loader({ request }) {
-  const { admin } = await shopify.authenticate.admin(request);
+## Where Config Is Stored (Metafields)
 
-  const response = await admin.graphql(`
-    {
-      products(first: 25) {
-        nodes {
-          title
-          description
-        }
-      }
-    }`);
+All discount configuration is stored in a **shop metafield** (no theme hard-coding).
 
-  const {
-    data: {
-      products: { nodes },
-    },
-  } = await response.json();
+| Field       | Value           |
+|------------|-----------------|
+| **Namespace** | `volume_discount` |
+| **Key**       | `rules`          |
+| **Owner**     | Shop             |
+| **Type**      | `json`           |
 
-  return nodes;
+**JSON shape:**
+
+```json
+{
+  "products": ["gid://shopify/Product/123", "gid://shopify/Product/456"],
+  "minQty": 2,
+  "percentOff": 10
 }
 ```
 
-This template comes pre-configured with examples of:
+- **products:** Array of product GIDs to which the discount applies.
+- **minQty:** Minimum quantity per line to qualify (fixed at `2` for this app).
+- **percentOff:** Discount percentage (1–80). Set in Admin UI.
 
-1. Setting up your Shopify app in [/app/shopify.server.ts](https://github.com/Shopify/shopify-app-template-react-router/blob/main/app/shopify.server.ts)
-2. Querying data using Graphql. Please see: [/app/routes/app.\_index.tsx](https://github.com/Shopify/shopify-app-template-react-router/blob/main/app/routes/app._index.tsx).
-3. Responding to webhooks. Please see [/app/routes/webhooks.tsx](https://github.com/Shopify/shopify-app-template-react-router/blob/main/app/routes/webhooks.app.uninstalled.tsx).
+The **Discount Function** reads this metafield at runtime. The **Theme App Extension** reads it via `shop.metafields.volume_discount.rules.value` in Liquid.
 
-Please read the [documentation for @shopify/shopify-app-react-router](https://shopify.dev/docs/api/shopify-app-react-router) to see what other API's are available.
+---
 
-## Shopify Dev MCP
+## How to Add the Theme Block (Theme Editor)
 
-This template is configured with the Shopify Dev MCP. This instructs [Cursor](https://cursor.com/), [GitHub Copilot](https://github.com/features/copilot) and [Claude Code](https://claude.com/product/claude-code) and [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) to use the Shopify Dev MCP.
+1. In Shopify Admin, go to **Online Store → Themes**.
+2. Click **Customize** on your theme (Online Store 2.0–compatible).
+3. Open a **Product page** template (or a template that includes the main product section).
+4. In the left sidebar, click **Add block**.
+5. Under **Apps**, find **Volume Discount Badge** (from the `volume-discount-widget` theme app extension).
+6. Add the block and place it where you want (e.g. in the Product information section).
+7. Optionally adjust block settings (icon, colors, padding, etc.) in the theme editor.
+8. Click **Save**.
 
-For more information on the Shopify Dev MCP please read [the documentation](https://shopify.dev/docs/apps/build/devmcp).
+The block shows **"Buy 2, get {percentOff}% off"** only when the current product is in the configured `volume_discount.rules` products list; otherwise it renders nothing.
 
-## Deployment
+---
 
-### Application Storage
-
-This template uses [Prisma](https://www.prisma.io/) to store session data, by default using an [SQLite](https://www.sqlite.org/index.html) database.
-The database is defined as a Prisma schema in `prisma/schema.prisma`.
-
-This use of SQLite works in production if your app runs as a single instance.
-The database that works best for you depends on the data your app needs and how it is queried.
-Here’s a short list of databases providers that provide a free tier to get started:
-
-| Database   | Type             | Hosters                                                                                                                                                                                                                                    |
-| ---------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| MySQL      | SQL              | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-mysql), [Planet Scale](https://planetscale.com/), [Amazon Aurora](https://aws.amazon.com/rds/aurora/), [Google Cloud SQL](https://cloud.google.com/sql/docs/mysql) |
-| PostgreSQL | SQL              | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-postgresql), [Amazon Aurora](https://aws.amazon.com/rds/aurora/), [Google Cloud SQL](https://cloud.google.com/sql/docs/postgres)                                   |
-| Redis      | Key-value        | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-redis), [Amazon MemoryDB](https://aws.amazon.com/memorydb/)                                                                                                        |
-| MongoDB    | NoSQL / Document | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-mongodb), [MongoDB Atlas](https://www.mongodb.com/atlas/database)                                                                                                  |
-
-To use one of these, you can use a different [datasource provider](https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#datasource) in your `schema.prisma` file, or a different [SessionStorage adapter package](https://github.com/Shopify/shopify-api-js/blob/main/packages/shopify-api/docs/guides/session-storage.md).
-
-### Build
-
-Build the app by running the command below with the package manager of your choice:
-
-Using yarn:
-
-```shell
-yarn build
-```
-
-Using npm:
-
-```shell
-npm run build
-```
-
-Using pnpm:
-
-```shell
-pnpm run build
-```
-
-## Hosting
-
-When you're ready to set up your app in production, you can follow [our deployment documentation](https://shopify.dev/docs/apps/launch/deployment) to host it externally. From there, you have a few options:
-
-- [Google Cloud Run](https://shopify.dev/docs/apps/launch/deployment/deploy-to-google-cloud-run): This tutorial is written specifically for this example repo, and is compatible with the extended steps included in the subsequent [**Build your app**](tutorial) in the **Getting started** docs. It is the most detailed tutorial for taking a React Router-based Shopify app and deploying it to production. It includes configuring permissions and secrets, setting up a production database, and even hosting your apps behind a load balancer across multiple regions.
-- [Fly.io](https://fly.io/docs/js/shopify/): Leverages the Fly.io CLI to quickly launch Shopify apps to a single machine.
-- [Render](https://render.com/docs/deploy-shopify-app): This tutorial guides you through using Docker to deploy and install apps on a Dev store.
-- [Manual deployment guide](https://shopify.dev/docs/apps/launch/deployment/deploy-to-hosting-service): This resource provides general guidance on the requirements of deployment including environment variables, secrets, and persistent data.
-
-When you reach the step for [setting up environment variables](https://shopify.dev/docs/apps/deployment/web#set-env-vars), you also need to set the variable `NODE_ENV=production`.
-
-## Gotchas / Troubleshooting
-
-### Database tables don't exist
-
-If you get an error like:
+## Project Structure (cross-verified)
 
 ```
-The table `main.Session` does not exist in the current database.
+discount-app/
+├── app/
+│   ├── routes/
+│   │   ├── _index/                    # Landing / login
+│   │   ├── app.jsx                     # App layout, nav, AppProvider
+│   │   ├── app._index.jsx              # Admin config UI (products + %)
+│   │   ├── app.additional.jsx          # Extra sample page
+│   │   ├── auth.$.jsx                  # Auth callback
+│   │   ├── auth.login/                 # Login route
+│   │   └── webhooks.app.*.jsx          # App webhooks (e.g. uninstalled)
+│   ├── shopify.server.js               # Shopify app + session (MongoDB)
+│   ├── db.server.js                    # DB client (e.g. Prisma if used)
+│   ├── entry.server.jsx
+│   └── root.jsx
+├── extensions/
+│   ├── discount-function/              # Discount Function extension
+│   │   ├── src/
+│   │   │   ├── index.js
+│   │   │   ├── cart_lines_discounts_generate_run.js    # Buy 2, X% off logic
+│   │   │   ├── cart_lines_discounts_generate_run.graphql
+│   │   │   ├── cart_delivery_options_discounts_generate_run.js
+│   │   │   └── cart_delivery_options_discounts_generate_run.graphql
+│   │   ├── shopify.extension.toml      # target: cart.lines.discounts.generate.run
+│   │   └── tests/
+│   └── volume-discount-widget/          # Theme App Extension
+│       ├── blocks/
+│       │   └── product-discount-message.liquid   # PDP widget "Buy 2, get X% off"
+│       └── shopify.extension.toml
+├── prisma/                             # Used in SQLite branch
+├── shopify.app.toml
+├── package.json
+└── README.md
 ```
 
-Create the database for Prisma. Run the `setup` script in `package.json` using `npm`, `yarn` or `pnpm`.
+---
 
-### Navigating/redirecting breaks an embedded app
+## Milestones (from requirements)
 
-Embedded apps must maintain the user session, which can be tricky inside an iFrame. To avoid issues:
+- **Milestone A – Dev env ready:** Partner account, dev store, app skeleton (one main config page). Use `shopify app dev` and install on dev store.
+- **Milestone B – Discount works:** Function applies "Buy 2, get X% off" when cart has ≥2 units of a configured product (target: `cart.lines.discounts.generate.run`). Provide a screen recording showing cart behaviour.
+- **Milestone C – UI + widget:** Admin UI saves config to metafield; PDP widget shows the correct message. Screen recording showing config save and widget on PDP.
 
-1. Use `Link` from `react-router` or `@shopify/polaris`. Do not use `<a>`.
-2. Use `redirect` returned from `authenticate.admin`. Do not use `redirect` from `react-router`
-3. Use `useSubmit` from `react-router`.
+---
 
-This only applies if your app is embedded, which it will be by default.
+## Acceptance Criteria (review checklist)
 
-### Webhooks: shop-specific webhook subscriptions aren't updated
+- [ ] App installs on a dev store without OAuth errors.
+- [ ] Admin can select ≥1 product and set `percentOff`; Save persists to shop metafield `volume_discount.rules`.
+- [ ] On PDP of a configured product, the widget shows "Buy 2, get X% off"; on non-configured products it shows nothing.
+- [ ] In cart/checkout, adding 2+ units of a configured product applies X% discount to those lines; removing items or dropping below 2 units removes the discount.
+- [ ] No discount when the product is not in the configured list.
+- [ ] Clear README with setup/run steps, metafield namespace/key, and theme block instructions.
+- [ ] Screen recording (with voice, ≤5 min) covering: app setup, architecture, admin config → save, PDP widget, cart with 2 units (discount) vs 1 unit (no discount).
+- [ ] **Partner + Dev store screenshots included** (see Screenshots section below).
 
-If you are registering webhooks in the `afterAuth` hook, using `shopify.registerWebhooks`, you may find that your subscriptions aren't being updated.
+---
 
-Instead of using the `afterAuth` hook declare app-specific webhooks in the `shopify.app.toml` file. This approach is easier since Shopify will automatically sync changes every time you run `deploy` (e.g: `npm run deploy`). Please read these guides to understand more:
+## Screenshots
 
-1. [app-specific vs shop-specific webhooks](https://shopify.dev/docs/apps/build/webhooks/subscribe#app-specific-subscriptions)
-2. [Create a subscription tutorial](https://shopify.dev/docs/apps/build/webhooks/subscribe/get-started?deliveryMethod=https)
+*Attach the following screenshots (required for review). Save images in a `screenshots/` folder in the repo and link them below, or embed them in the README.*
 
-If you do need shop-specific webhooks, keep in mind that the package calls `afterAuth` in 2 scenarios:
+### 1. Partner Dashboard – Stores page
 
-- After installing the app
-- When an access token expires
+*Required for Milestone A.*  
+Screenshot of the Partner Dashboard **Stores** page showing your development store(s).
 
-During normal development, the app won't need to re-authenticate most of the time, so shop-specific subscriptions aren't updated. To force your app to update the subscriptions, uninstall and reinstall the app. Revisiting the app will call the `afterAuth` hook.
+![Partner Dashboard – Stores](screenshots/partner-dashboard-stores.png)
 
-### Webhooks: Admin created webhook failing HMAC validation
+---
 
-Webhooks subscriptions created in the [Shopify admin](https://help.shopify.com/en/manual/orders/notifications/webhooks) will fail HMAC validation. This is because the webhook payload is not signed with your app's secret key.
+### 2. Dev store Admin
 
-The recommended solution is to use [app-specific webhooks](https://shopify.dev/docs/apps/build/webhooks/subscribe#app-specific-subscriptions) defined in your toml file instead. Test your webhooks by triggering events manually in the Shopify admin(e.g. Updating the product title to trigger a `PRODUCTS_UPDATE`).
+*Required for Milestone A.*  
+Screenshot of your development store’s **Admin** (e.g. dashboard or Store settings) to confirm the dev store is set up.
 
-### Webhooks: Admin object undefined on webhook events triggered by the CLI
+![Dev store Admin](screenshots/dev-store-admin.png)
 
-When you trigger a webhook event using the Shopify CLI, the `admin` object will be `undefined`. This is because the CLI triggers an event with a valid, but non-existent, shop. The `admin` object is only available when the webhook is triggered by a shop that has installed the app. This is expected.
+---
 
-Webhooks triggered by the CLI are intended for initial experimentation testing of your webhook configuration. For more information on how to test your webhooks, see the [Shopify CLI documentation](https://shopify.dev/docs/apps/tools/cli/commands#webhook-trigger).
+### 3. App installed – Admin config page (optional)
 
-### Incorrect GraphQL Hints
+*Optional; useful for Milestone C / demo.*  
+Screenshot of the app open in Shopify Admin showing the Volume Discount Configuration page (product picker, discount %, Save).
 
-By default the [graphql.vscode-graphql](https://marketplace.visualstudio.com/items?itemName=GraphQL.vscode-graphql) extension for will assume that GraphQL queries or mutations are for the [Shopify Admin API](https://shopify.dev/docs/api/admin). This is a sensible default, but it may not be true if:
+![App Admin config page](screenshots/app-admin-config.png)
 
-1. You use another Shopify API such as the storefront API.
-2. You use a third party GraphQL API.
+---
 
-If so, please update [.graphqlrc.ts](https://github.com/Shopify/shopify-app-template-react-router/blob/main/.graphqlrc.ts).
+### 4. PDP widget (optional)
 
-### Using Defer & await for streaming responses
+*Optional; useful for Milestone C / demo.*  
+Screenshot of a **product page** where the theme block shows “Buy 2, get X% off” for a configured product.
 
-By default the CLI uses a cloudflare tunnel. Unfortunately cloudflare tunnels wait for the Response stream to finish, then sends one chunk. This will not affect production.
+![PDP widget](screenshots/pdp-widget.png)
 
-To test [streaming using await](https://reactrouter.com/api/components/Await#await) during local development we recommend [localhost based development](https://shopify.dev/docs/apps/build/cli-for-apps/networking-options#localhost-based-development).
+---
 
-### "nbf" claim timestamp check failed
+### 5. Cart with discount applied (optional)
 
-This is because a JWT token is expired. If you are consistently getting this error, it could be that the clock on your machine is not in sync with the server. To fix this ensure you have enabled "Set time and date automatically" in the "Date and Time" settings on your computer.
+*Optional; useful for Milestone B / demo.*  
+Screenshot of the **cart** (or checkout order summary) with 2+ units of a configured product, showing the X% discount applied on the line.
 
-### Using MongoDB and Prisma
+![Cart with discount](screenshots/cart-with-discount.png)
 
-If you choose to use MongoDB with Prisma, there are some gotchas in Prisma's MongoDB support to be aware of. Please see the [Prisma SessionStorage README](https://www.npmjs.com/package/@shopify/shopify-app-session-storage-prisma#mongodb).
+## How It Works
 
-### Unable to require(`C:\...\query_engine-windows.dll.node`).
+1. **Admin UI (`app._index.jsx`):** Merchant selects products (resource picker) and discount % (1–80), then Save. The app writes JSON to the shop metafield `volume_discount.rules`.
+2. **Discount Function:** Runs on `cart.lines.discounts.generate.run`. Reads `shop.metafield(namespace: "volume_discount", key: "rules")`, parses JSON, and for each cart line whose product is in `config.products` and quantity ≥ `minQty`, returns a percentage discount operation. Automatic discount; no code entry.
+3. **Theme widget:** Liquid block reads `shop.metafields.volume_discount.rules.value`. If the current product is in the list, it shows "Buy {minQty}, get {percentOff}% off"; otherwise it renders nothing.
 
-Unable to require(`C:\...\query_engine-windows.dll.node`).
-The Prisma engines do not seem to be compatible with your system.
 
-query_engine-windows.dll.node is not a valid Win32 application.
+## Deliverables (from requirements)
 
-**Fix:** Set the environment variable:
+- **Screen recording** (≤5 min, with voice; camera on preferred): app setup, architecture, admin config → save, PDP widget, cart with 2 units (discount) vs 1 unit (no discount).
+- **One test product** pre-configured in the app for demo.
+- **README** (this file): install & dev commands, where config is stored (metafield namespace/key), how to add the theme block, limitations/next steps.
 
-```shell
-PRISMA_CLIENT_ENGINE_TYPE=binary
-```
+---
 
-This forces Prisma to use the binary engine mode, which runs the query engine as a separate process and can work via emulation on Windows ARM64.
+## Troubleshooting
 
-## Resources
+- **Widget not showing:** Ensure the block is added in Theme Editor (Apps → Volume Discount Badge) and the product is in the app’s configured product list. Check `shop.metafields.volume_discount.rules.value` in Liquid if needed.
+- **Discount not applying:** Confirm quantity ≥ 2 and product is in `volume_discount.rules`. Check Discounts in Admin and function logs: `shopify app function logs`.
+- **Product picker / session issues (MongoDB branch):** Ensure MongoDB is running and `MONGODB_URI` / `MONGODB_DATABASE` are correct. Check browser console and server logs for session/auth errors.
+- **Build errors:** `rm -rf node_modules dist && npm install && shopify app dev`
 
-React Router:
+---
 
-- [React Router docs](https://reactrouter.com/home)
+## Official Docs (reference)
 
-Shopify:
+- [Become a Shopify Partner](https://partners.shopify.com/signup)
+- [Create a Development Store](https://help.shopify.com/en/manual/partners/dashboard/development-stores/create)
+- [Discount Function API](https://shopify.dev/docs/api/functions) (targets, input, operations) — use `cart.lines.discounts.generate.run`
+- [Metafields](https://shopify.dev/docs/apps/custom-data/metafields)
+- [Theme App Extensions & App Blocks](https://shopify.dev/docs/apps/online-store/theme-app-extensions)
+- [Shopify App React Router](https://shopify.dev/docs/api/shopify-app-react-router)
 
-- [Intro to Shopify apps](https://shopify.dev/docs/apps/getting-started)
-- [Shopify App React Router docs](https://shopify.dev/docs/api/shopify-app-react-router)
-- [Shopify CLI](https://shopify.dev/docs/apps/tools/cli)
-- [Shopify App Bridge](https://shopify.dev/docs/api/app-bridge-library).
-- [Polaris Web Components](https://shopify.dev/docs/api/app-home/polaris-web-components).
-- [App extensions](https://shopify.dev/docs/apps/app-extensions/list)
-- [Shopify Functions](https://shopify.dev/docs/api/functions)
+---
 
-Internationalization:
+## License
 
-- [Internationalizing your app](https://shopify.dev/docs/apps/best-practices/internationalization/getting-started)
+MIT
