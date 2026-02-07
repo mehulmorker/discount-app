@@ -438,33 +438,30 @@ export const loader = async ({ request }) => {
       }
     }
 
-    // Fetch product details for the configured products
+    // Fetch product details for the configured products (by ID – standard Admin API approach)
     let selectedProducts = [];
     if (config.products && config.products.length > 0) {
       try {
-        const productsQuery = config.products.map(id => `id:${id}`).join(' OR ');
-        const productsResponse = await admin.graphql(`
-          #graphql
-          query($query: String!) {
-            products(first: 250, query: $query) {
-              edges {
-                node {
+        const ids = config.products.filter(Boolean);
+        if (ids.length > 0) {
+          const nodesResponse = await admin.graphql(
+            `#graphql
+            query($ids: [ID!]!) {
+              nodes(ids: $ids) {
+                ... on Product {
                   id
                   title
                 }
               }
-            }
-          }
-        `, {
-          variables: {
-            query: productsQuery
-          }
-        });
-        const productsData = await productsResponse.json();
-        selectedProducts = productsData.data?.products?.edges.map(edge => ({
-          id: edge.node.id,
-          title: edge.node.title
-        })) || [];
+            }`,
+            { variables: { ids } }
+          );
+          const nodesData = await nodesResponse.json();
+          const nodes = nodesData.data?.nodes || [];
+          selectedProducts = nodes
+            .filter((node) => node != null && node.id)
+            .map((node) => ({ id: node.id, title: node.title || "Untitled" }));
+        }
       } catch (e) {
         console.error("Error fetching product details:", e);
       }
@@ -636,6 +633,11 @@ export default function DiscountConfig() {
         type: "product",
         multiple: true,
         action: "select",
+        // Pre-select currently configured products so they show with checkmarks
+        selectionIds:
+          selectedProducts.length > 0
+            ? selectedProducts.map((p) => ({ id: p.id }))
+            : undefined,
       });
 
       if (selection && selection.length > 0) {
@@ -682,7 +684,10 @@ export default function DiscountConfig() {
 
   return (
     <s-page heading="Volume Discount Configuration">
-      <s-button slot="secondary-action" href="/app">
+      <s-button
+        slot="secondary-action"
+        onClick={() => shopify.navigate?.("/app") ?? (window.location.href = "/app")}
+      >
         Back to Home
       </s-button>
 

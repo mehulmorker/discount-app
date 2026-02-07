@@ -1,0 +1,55 @@
+{% comment %}
+  Cart Discount Message Block
+  Shows discount info in cart drawer/page
+{% endcomment %}
+
+{% assign config_json = shop.metafields.volume_discount.rules.value %}
+
+{% if config_json != blank %}
+  {% assign config = config_json | parse_json %}
+  
+  {% assign has_discounted_products = false %}
+  {% assign qualifying_items = 0 %}
+  
+  {% for item in cart.items %}
+    {% assign item_product_gid = item.product.id | prepend: 'gid://shopify/Product/' %}
+    
+    {% for product_id in config.products %}
+      {% if product_id == item_product_gid %}
+        {% assign has_discounted_products = true %}
+        {% if item.quantity >= config.minQty %}
+          {% assign qualifying_items = qualifying_items | plus: 1 %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+  
+  {% if has_discounted_products %}
+    <div class="volume-discount-cart-message">
+      {% if qualifying_items > 0 %}
+        <p class="volume-discount-cart-message__success">
+          ✓ Volume discount applied! You're saving {{ config.percentOff }}% on {{ qualifying_items }} 
+          {% if qualifying_items == 1 %}item{% else %}items{% endif %}.
+        </p>
+      {% else %}
+        <p class="volume-discount-cart-message__info">
+          Add {{ config.minQty }} or more of eligible items to save {{ config.percentOff }}%!
+        </p>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endif %}
+
+{% schema %}
+{
+  "name": "Cart Discount",
+  "target": "section",
+  "stylesheet": "cart-discount.css",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Shows volume discount status in cart"
+    }
+  ]
+}
+{% endschema %}

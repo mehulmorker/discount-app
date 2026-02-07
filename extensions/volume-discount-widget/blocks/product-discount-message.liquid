@@ -1,0 +1,134 @@
+{% comment %}
+  Volume Discount Widget
+  Displays "Buy 2, get X% off" message on product pages
+  Only shows if the current product is in the configured discount list
+{% endcomment %}
+
+{% assign product_id = product.id | prepend: 'gid://shopify/Product/' %}
+{% assign config = shop.metafields.volume_discount.rules.value %}
+
+{% assign show_badge = false %}
+{% assign min_qty = 2 %}
+{% assign percent_off = 10 %}
+
+{% if config %}
+  {% assign products = config.products %}
+  {% assign configured_percent_off = config.percentOff %}
+  {% assign configured_min_qty = config.minQty | default: 2 %}
+
+  {% comment %} Check if current product is in the configured list {% endcomment %}
+  {% for product_gid in products %}
+    {% if product_gid == product_id %}
+      {% assign show_badge = true %}
+      {% assign min_qty = configured_min_qty %}
+      {% assign percent_off = configured_percent_off %}
+      {% break %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{% if show_badge %}
+  <div class="volume-discount-badge" style="background: {{ block.settings.background_color }}; color: {{ block.settings.text_color }}; padding: {{ block.settings.padding }}px; border-radius: {{ block.settings.border_radius }}px; text-align: {{ block.settings.text_align }}; margin: {{ block.settings.margin }}px 0; font-size: {{ block.settings.font_size }}px; font-weight: {{ block.settings.font_weight }}; border: 2px solid {{ block.settings.border_color }};">
+    {% if block.settings.icon != blank %}{{ block.settings.icon }} {% endif %}
+    Buy {{ min_qty }}, get {{ percent_off }}% off
+  </div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Volume Discount Badge",
+  "target": "section",
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "This block displays a volume discount message on product pages. It will only show for products that are configured in the app admin."
+    },
+    {
+      "type": "text",
+      "id": "icon",
+      "label": "Icon/Emoji",
+      "default": "🎉",
+      "info": "Optional icon or emoji to display before the message"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background Color",
+      "default": "#e3f2fd"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text Color",
+      "default": "#1976d2"
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Border Color",
+      "default": "#1976d2"
+    },
+    {
+      "type": "range",
+      "id": "font_size",
+      "label": "Font Size",
+      "min": 12,
+      "max": 24,
+      "step": 1,
+      "default": 16,
+      "unit": "px"
+    },
+    {
+      "type": "select",
+      "id": "font_weight",
+      "label": "Font Weight",
+      "options": [
+        { "value": "normal", "label": "Normal" },
+        { "value": "bold", "label": "Bold" }
+      ],
+      "default": "bold"
+    },
+    {
+      "type": "range",
+      "id": "padding",
+      "label": "Padding",
+      "min": 8,
+      "max": 32,
+      "step": 2,
+      "default": 12,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "margin",
+      "label": "Margin",
+      "min": 0,
+      "max": 32,
+      "step": 2,
+      "default": 16,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "border_radius",
+      "label": "Border Radius",
+      "min": 0,
+      "max": 20,
+      "step": 2,
+      "default": 8,
+      "unit": "px"
+    },
+    {
+      "type": "select",
+      "id": "text_align",
+      "label": "Text Alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    }
+  ]
+}
+{% endschema %}
