@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "0462d67941bd8b42f3e24ef1d2e75d9f"
-name = "discount-app"
+client_id = "8b00eaa1c5c9706b27dbc309e6374093"
+name = "discount-app-prisma"
 application_url = "https://example.com"
 embedded = true
 
